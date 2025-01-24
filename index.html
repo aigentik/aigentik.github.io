@@ -1,12 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>WebGL AI Agent coding in C#</title>
+  <style>
+    html, body {
+      margin: 0; 
+      padding: 0; 
+      width: 100%; 
+      height: 100%;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
 <body>
-    <h1>We are coming</h1>
-    <progress id="animatedProgress" value="0" max="100"></progress>
-    <script>
-      let currentValue = 0;
-      setInterval(() => {
-        const progressBar = document.getElementById('animatedProgress');
-        currentValue = (currentValue + 1) % 101;
-        progressBar.value = currentValue;
-      }, 100);
-    </script>
+  <canvas id="glCanvas"></canvas>
+  <script>
+    const glCanvas = document.getElementById("glCanvas");
+    const gl = glCanvas.getContext("webgl");
+
+    function resizeCanvas() {
+      glCanvas.width = glCanvas.clientWidth;
+      glCanvas.height = glCanvas.clientHeight;
+      gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+    }
+    window.addEventListener("resize", resizeCanvas);
+
+    // Offscreen canvas
+    const textCanvas = document.createElement("canvas");
+    textCanvas.width = 512;
+    textCanvas.height = 256;
+    const textCtx = textCanvas.getContext("2d");
+
+    // Shaders
+    const vsSrc = `
+      attribute vec2 aPos;
+      varying vec2 vTexCoord;
+      void main(void){
+        gl_Position = vec4(aPos, 0, 1);
+        vTexCoord = (aPos * 0.5) + 0.5;
+      }
+    `;
+    const fsSrc = `
+      precision mediump float;
+      varying vec2 vTexCoord;
+      uniform sampler2D uTexture;
+      void main(void){
+        gl_FragColor = texture2D(uTexture, vTexCoord);
+      }
+    `;
+    function compile(src, type){
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, src);
+      gl.compileShader(shader);
+      return shader;
+    }
+    const vs = compile(vsSrc, gl.VERTEX_SHADER);
+    const fs = compile(fsSrc, gl.FRAGMENT_SHADER);
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    gl.useProgram(prog);
+
+    // Full quad
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,  -1, 1,   1, -1,
+      1, -1,   -1, 1,   1, 1
+    ]), gl.STATIC_DRAW);
+    const aPosLoc = gl.getAttribLocation(prog, "aPos");
+    gl.enableVertexAttribArray(aPosLoc);
+    gl.vertexAttribPointer(aPosLoc, 2, gl.FLOAT, false, 0, 0);
+
+    // Texture
+    const textTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, textTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    const uTextureLoc = gl.getUniformLocation(prog, "uTexture");
+    gl.uniform1i(uTextureLoc, 0);
+
+    // Code lines
+    const codeLines = [
+      "using System;",
+      "public class AI_Agent {",
+      "  public static void Main() {",
+      "    Console.WriteLine('Hello AI Agent!');",
+      "  }",
+      "}"
+    ];
+    let currentLine = 0;
+    let currentChar = 0;
+
+    function updateText() {
+      textCtx.fillStyle = "#222";
+      textCtx.fillRect(0, 0, textCanvas.width, textCanvas.height);
+      textCtx.fillStyle = "#0f0";
+      textCtx.font = "20px monospace";
+
+      let y = 30;
+      for (let i = 0; i <= currentLine; i++) {
+        const lineToRender = (i < currentLine)
+          ? codeLines[i]
+          : codeLines[i].substr(0, currentChar);
+        textCtx.fillText(lineToRender, 10, y);
+        y += 24;
+      }
+
+      gl.bindTexture(gl.TEXTURE_2D, textTex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textCanvas);
+
+      if (currentLine < codeLines.length) {
+        currentChar++;
+        if (currentChar > codeLines[currentLine].length) {
+          currentChar = 0;
+          currentLine++;
+        }
+      }
+    }
+
+    function draw() {
+      gl.clearColor(0.1, 0.1, 0.1, 1.0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+
+    function animate() {
+      updateText();
+      draw();
+      requestAnimationFrame(animate);
+    }
+
+    resizeCanvas();
+    animate();
+  </script>
 </body>
+</html>
